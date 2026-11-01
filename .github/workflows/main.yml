@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,8 +26,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # لا نستخدم android-actions/setup-android هنا: عدّاد Ubuntu الجاهز
+      # من GitHub يأتي أصلًا ومعه Android SDK وتراخيصه مقبولة مسبقًا،
+      # وهذا الإجراء البديل هو ما كان يسبب فشل البناء بسبب طلب قبول
+      # تراخيص جديدة بشكل تفاعلي لا يعمل داخل CI.
+      - name: Accept any remaining Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null || true
 
       - name: Install JS dependencies
         run: npm install
@@ -45,8 +52,23 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload APK as build artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish Beta release with the APK
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: beta-${{ github.run_number }}
+          name: "إصدار تجريبي (Beta) #${{ github.run_number }}"
+          body: |
+            بناء تلقائي من فرع main — commit: ${{ github.sha }}
+            هذا إصدار تجريبي (Beta) لأغراض الاختبار فقط.
+          prerelease: true
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
