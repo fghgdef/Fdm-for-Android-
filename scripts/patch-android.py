@@ -59,6 +59,38 @@ def step3_patch_manifest():
         f.write(content)
     print("[patch-android] تم تحديث AndroidManifest.xml")
 
+ROOT_BUILD_GRADLE = os.path.join(ANDROID, "build.gradle")
+
+def step4b_ensure_kotlin_plugin():
+    # 1) تأكد من وجود classpath لإضافة Kotlin Gradle في ملف build.gradle الجذري
+    with open(ROOT_BUILD_GRADLE, "r", encoding="utf-8") as f:
+        root = f.read()
+    kotlin_version = "1.9.24"
+    if "kotlin-gradle-plugin" not in root:
+        root = root.replace(
+            "dependencies {",
+            f'dependencies {{\n        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:{kotlin_version}"',
+            1
+        )
+        with open(ROOT_BUILD_GRADLE, "w", encoding="utf-8") as f:
+            f.write(root)
+
+    # 2) تأكد من تطبيق plugin kotlin-android في app/build.gradle
+    with open(BUILD_GRADLE, "r", encoding="utf-8") as f:
+        content = f.read()
+    if "kotlin-android" not in content:
+        if "apply plugin: 'com.android.application'" in content:
+            content = content.replace(
+                "apply plugin: 'com.android.application'",
+                "apply plugin: 'com.android.application'\napply plugin: 'kotlin-android'",
+                1
+            )
+        else:
+            content = "apply plugin: 'kotlin-android'\n" + content
+        with open(BUILD_GRADLE, "w", encoding="utf-8") as f:
+            f.write(content)
+    print("[patch-android] تم التأكد من تفعيل Kotlin plugin")
+
 def step4_patch_build_gradle():
     with open(BUILD_GRADLE, "r", encoding="utf-8") as f:
         content = f.read()
@@ -81,10 +113,4 @@ def step4_patch_build_gradle():
         with open(BUILD_GRADLE, "w", encoding="utf-8") as f:
             f.write(content)
     print("[patch-android] تم تحديث build.gradle")
-
-if __name__ == "__main__":
-    step1_copy_kotlin_sources()
-    step2_patch_main_activity()
-    step3_patch_manifest()
-    step4_patch_build_gradle()
-    print("[patch-android] اكتمل الدمج بنجاح ✅")
+    
