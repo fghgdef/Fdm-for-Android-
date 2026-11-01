@@ -82,7 +82,16 @@ function waitForPlugin(tries){
     return;
   }
   if (tries <= 0){
-    showDebug('تعذّر الوصول إلى إضافة DownloadManager الأصلية. تأكد أن MainActivity يسجّل DownloadManagerPlugin، وأن التطبيق يعمل كتطبيق أندرويد حقيقي (ليس متصفحًا عاديًا).');
+    const hasCap = !!window.Capacitor;
+    const isNative = hasCap && typeof window.Capacitor.isNativePlatform === 'function'
+      ? window.Capacitor.isNativePlatform() : 'غير معروف';
+    const pluginKeys = hasCap && window.Capacitor.Plugins ? Object.keys(window.Capacitor.Plugins).join(', ') : 'لا يوجد';
+    showDebug(
+      'تعذّر إيجاد إضافة DownloadManager.\n' +
+      'window.Capacitor موجود؟ ' + hasCap + '\n' +
+      'isNativePlatform: ' + isNative + '\n' +
+      'الإضافات المسجّلة فعليًا: ' + pluginKeys
+    );
     return;
   }
   setTimeout(() => waitForPlugin(tries - 1), 100);
