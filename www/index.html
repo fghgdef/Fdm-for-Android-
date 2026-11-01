@@ -41,9 +41,12 @@ main{padding:14px 16px 30px;}
 .actions button{background:none;border:1px solid var(--line);color:var(--text);border-radius:6px;
   width:28px;height:28px;cursor:pointer;font-size:12px;margin-inline-start:6px;}
 .empty{text-align:center;color:var(--sub);font-size:13px;padding:50px 20px;}
+#debugBox{display:none;margin:0 16px 10px;padding:10px 12px;background:#fdecea;border:1px solid #f5c6c2;
+  border-radius:8px;color:#8a2e24;font-size:12px;white-space:pre-wrap;}
 </style>
 </head>
 <body>
+<div id="debugBox"></div>
 <header>
   <h1>مدير<span>التنزيلات</span></h1>
   <div class="addrow">
@@ -58,10 +61,61 @@ main{padding:14px 16px 30px;}
 <main id="list"><div class="empty">لا توجد تنزيلات بعد</div></main>
 
 <script>
-// ملاحظة: Capacitor يحقن window.Capacitor تلقائيًا عند تشغيل الصفحة داخل التطبيق الأصلي، لا حاجة لأي استيراد يدوي
-const DM = window.Capacitor.Plugins.DownloadManager;
+function showDebug(msg){
+  const box = document.getElementById('debugBox');
+  box.style.display = 'block';
+  box.textContent = String(msg);
+}
+window.onerror = function(msg, src, line, col, err){
+  showDebug('خطأ: ' + msg + ' (سطر ' + line + ')');
+};
+
 const list = document.getElementById('list');
 let tasks = {}; // id -> task state
+let DM = null;
+
+// ننتظر جاهزية جسر Capacitor بدل الاعتماد على توفره فورًا عند تحميل الصفحة
+function waitForPlugin(tries){
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DownloadManager){
+    DM = window.Capacitor.Plugins.DownloadManager;
+    initApp();
+    return;
+  }
+  if (tries <= 0){
+    showDebug('تعذّر الوصول إلى إضافة DownloadManager الأصلية. تأكد أن MainActivity يسجّل DownloadManagerPlugin، وأن التطبيق يعمل كتطبيق أندرويد حقيقي (ليس متصفحًا عاديًا).');
+    return;
+  }
+  setTimeout(() => waitForPlugin(tries - 1), 100);
+}
+
+function initApp(){
+  document.getElementById('addBtn').addEventListener('click', async ()=>{
+    try{
+      const inp = document.getElementById('urlInput');
+      const url = inp.value.trim();
+      if(!url) return;
+      const segments = Number(document.getElementById('segCount').value);
+      const res = await DM.addDownload({ url, segments });
+      tasks[res.id] = res;
+      render();
+      inp.value = '';
+    }catch(e){
+      showDebug('فشل إضافة التنزيل: ' + (e && e.message ? e.message : e));
+    }
+  });
+
+  DM.addListener('downloadProgress', (t)=>{
+    tasks[t.id] = t;
+    render();
+  });
+
+  DM.list().then(res=>{
+    (res.items||[]).forEach(t=> tasks[t.id] = t);
+    render();
+  }).catch(e=> showDebug('فشل جلب القائمة: ' + (e && e.message ? e.message : e)));
+}
+
+waitForPlugin(50); // يحاول لمدة 5 ثوانٍ تقريبًا
 
 function fmtSize(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(0)+' KB'; return (b/1048576).toFixed(2)+' MB'; }
 function fmtSpeed(bps){ return fmtSize(bps)+'/s'; }
@@ -102,29 +156,7 @@ list.addEventListener('click', e=>{
   if(btn.dataset.act==='cancel'){ DM.cancel({ id }); delete tasks[id]; render(); }
 });
 
-document.getElementById('addBtn').addEventListener('click', async ()=>{
-  const inp = document.getElementById('urlInput');
-  const url = inp.value.trim();
-  if(!url) return;
-  const segments = Number(document.getElementById('segCount').value);
-  const res = await DM.addDownload({ url, segments });
-  tasks[res.id] = res;
-  render();
-  inp.value = '';
-});
 
-// استقبال تحديثات التقدم من الكود الأصلي (Kotlin)
-DM.addListener('downloadProgress', (t)=>{
-  tasks[t.id] = t;
-  render();
-});
-
-// عند فتح التطبيق، اطلب قائمة التنزيلات الحالية (تشمل ما كان يعمل قبل إغلاق التطبيق)
-(async ()=>{
-  const res = await DM.list();
-  (res.items||[]).forEach(t=> tasks[t.id] = t);
-  render();
-})();
 </script>
 </body>
 </html>
