@@ -1,43 +1,52 @@
-name: Extract fdm-android Contents to Root
+name: Build Android APK
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
 
 jobs:
-  unzip:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract ZIP and move contents to root
-        run: |
-          # 1. اسم ملف الـ ZIP (عدّله إذا كان اسمه مختلفاً)
-          ZIP_FILE="fdm-android.zip"
-          
-          # 2. اسم المجلد الداخلي الذي تريد سحب محتوياته
-          INNER_DIR="fdm-android"
-          
-          # 3. إنشاء مجلد مؤقت لفك الضغط فيه أولاً
-          mkdir -p temp_extract
-          
-          # 4. فك الضغط في المجلد المؤقت
-          7z x "$ZIP_FILE" -o"temp_extract" -y
-          
-          # 5. نسخ محتويات المجلد الداخلي إلى الجذر (مع إخفاء الملفات المخفية)
-          # النجمة /* تعني "كل ما بداخل المجلد" وليس المجلد نفسه
-          cp -r temp_extract/"$INNER_DIR"/* .
-          
-          # 6. حذف المجلد المؤقت
-          rm -rf temp_extract
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Commit and push to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --staged --quiet || git commit -m "Extract $INNER_DIR contents to root"
-          git push
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install JS dependencies
+        run: npm install
+
+      - name: Generate native Android project (Capacitor)
+        run: npx cap add android
+
+      - name: Merge custom native download engine into the project
+        run: python3 scripts/patch-android.py
+
+      - name: Sync web assets into the Android project
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
