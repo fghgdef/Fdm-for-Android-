@@ -1,0 +1,9 @@
+{
+  "appId": "com.example.fdm",
+  "appName": "مدير التنزيلات",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true
+  }
+}
